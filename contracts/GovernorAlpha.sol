@@ -1,13 +1,4 @@
-// COPIED FROM https://github.com/compound-finance/compound-protocol/blob/master/contracts/Governance/GovernorAlpha.sol
-// Copyright 2020 Compound Labs, Inc.
-// Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-// 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Ctrl+f for XXX to see all the modifications.
-// uint96s are changed to uint256s for simplicity and safety.
+// SPDX-License-Identifier: MIT
 
 // XXX: pragma solidity ^0.5.16;
 pragma solidity 0.6.12;
@@ -61,43 +52,43 @@ contract GovernorAlpha {
   uint256 public proposalCount;
 
   struct Proposal {
-    /// @notice Unique id for looking up a proposal
+    // Unique id for looking up a proposal
     uint256 id;
-    /// @notice Creator of the proposal
+    // Creator of the proposal
     address proposer;
-    /// @notice The timestamp that the proposal will be available for execution, set once the vote succeeds
+    // The timestamp that the proposal will be available for execution, set once the vote succeeds
     uint256 eta;
-    /// @notice the ordered list of target addresses for calls to be made
+    // the ordered list of target addresses for calls to be made
     address[] targets;
-    /// @notice The ordered list of values (i.e. msg.value) to be passed to the calls to be made
+    // The ordered list of values (i.e. msg.value) to be passed to the calls to be made
     uint256[] values;
-    /// @notice The ordered list of function signatures to be called
+    // The ordered list of function signatures to be called
     string[] signatures;
-    /// @notice The ordered list of calldata to be passed to each call
+    // The ordered list of calldata to be passed to each call
     bytes[] calldatas;
-    /// @notice The block at which voting begins: holders must delegate their votes prior to this block
+    // The block at which voting begins: holders must delegate their votes prior to this block
     uint256 startBlock;
-    /// @notice The block at which voting ends: votes must be cast prior to this block
+    // The block at which voting ends: votes must be cast prior to this block
     uint256 endBlock;
-    /// @notice Current number of votes in favor of this proposal
+    // Current number of votes in favor of this proposal
     uint256 forVotes;
-    /// @notice Current number of votes in opposition to this proposal
+    // Current number of votes in opposition to this proposal
     uint256 againstVotes;
-    /// @notice Flag marking whether the proposal has been canceled
+    // Flag marking whether the proposal has been canceled
     bool canceled;
-    /// @notice Flag marking whether the proposal has been executed
+    // Flag marking whether the proposal has been executed
     bool executed;
-    /// @notice Receipts of ballots for the entire set of voters
+    // Receipts of ballots for the entire set of voters
     mapping(address => Receipt) receipts;
   }
 
   /// @notice Ballot receipt record for a voter
   struct Receipt {
-    /// @notice Whether or not a vote has been cast
+    // Whether or not a vote has been cast
     bool hasVoted;
-    /// @notice Whether or not the voter supports the proposal
+    // Whether or not the voter supports the proposal
     bool support;
-    /// @notice The number of votes the voter had, which were cast
+    // The number of votes the voter had, which were cast
     uint256 votes;
   }
 
@@ -169,11 +160,14 @@ contract GovernorAlpha {
     guardian = guardian_;
   }
 
+  // Each SUSHI token holder with at least 1% of supply, is allowed to add a new proposal,
+  // but they can only have one active proposal at any given time.
+  // Lastly a description string must be passed that contains a human-readable explanation the proposal.
   function propose(
-    address[] memory targets,
-    uint256[] memory values,
-    string[] memory signatures,
-    bytes[] memory calldatas,
+    address[] memory targets, // A target address for a call to be made
+    uint256[] memory values, // The msg.value to be passed to the call.
+    string[] memory signatures, // The function signature for the call, e.g., 'transfer(address,uint256)'
+    bytes[] memory calldatas, // The data (parameters) to be passed to the function call.
     string memory description
   ) public returns (uint256) {
     require(
@@ -181,38 +175,48 @@ contract GovernorAlpha {
         proposalThreshold(),
       "GovernorAlpha::propose: proposer votes below proposal threshold"
     );
+
     require(
       targets.length == values.length &&
         targets.length == signatures.length &&
         targets.length == calldatas.length,
       "GovernorAlpha::propose: proposal function information arity mismatch"
     );
+
     require(
       targets.length != 0,
       "GovernorAlpha::propose: must provide actions"
     );
+
     require(
       targets.length <= proposalMaxOperations(),
       "GovernorAlpha::propose: too many actions"
     );
 
     uint256 latestProposalId = latestProposalIds[msg.sender];
+
     if (latestProposalId != 0) {
       ProposalState proposersLatestProposalState = state(latestProposalId);
+
       require(
         proposersLatestProposalState != ProposalState.Active,
         "GovernorAlpha::propose: one live proposal per proposer, found an already active proposal"
       );
+
       require(
         proposersLatestProposalState != ProposalState.Pending,
         "GovernorAlpha::propose: one live proposal per proposer, found an already pending proposal"
       );
     }
 
+    // start block => next block
     uint256 startBlock = add256(block.number, votingDelay());
+    // end block => startBlock + 3 days
     uint256 endBlock = add256(startBlock, votingPeriod());
 
+    // The total number of proposals
     proposalCount++;
+
     Proposal memory newProposal = Proposal({
       id: proposalCount,
       proposer: msg.sender,
@@ -246,13 +250,22 @@ contract GovernorAlpha {
     return newProposal.id;
   }
 
+  // After a proposal has succeeded,
+  // any address can call the queue method to move the proposal
+  // into the Timelock queue
   function queue(uint256 proposalId) public {
     require(
       state(proposalId) == ProposalState.Succeeded,
       "GovernorAlpha::queue: proposal can only be queued if it is succeeded"
     );
+
     Proposal storage proposal = proposals[proposalId];
+
+    // The timestamp that the proposal will be available for execution, set once the vote succeeds
+    // delay: How many days one has to wait between a proposal being accepted until it can be executed.
+    // Can be changed by the governance to anywhere from two to 30 days.
     uint256 eta = add256(block.timestamp, timelock.delay());
+
     for (uint256 i = 0; i < proposal.targets.length; i++) {
       _queueOrRevert(
         proposal.targets[i],
@@ -262,7 +275,9 @@ contract GovernorAlpha {
         eta
       );
     }
+
     proposal.eta = eta;
+
     emit ProposalQueued(proposalId, eta);
   }
 
@@ -273,22 +288,31 @@ contract GovernorAlpha {
     bytes memory data,
     uint256 eta
   ) internal {
+    // mapping(bytes32 => bool) public queuedTransactions;
     require(
       !timelock.queuedTransactions(
         keccak256(abi.encode(target, value, signature, data, eta))
       ),
       "GovernorAlpha::_queueOrRevert: proposal action already queued at eta"
     );
+
+    // Saving an action hash to a queue
     timelock.queueTransaction(target, value, signature, data, eta);
   }
 
+  // Once the Timelock delay has passed, anyone may call the execute method.
+  // This will now run each action part of the accepted proposal sequentially.
   function execute(uint256 proposalId) public payable {
     require(
       state(proposalId) == ProposalState.Queued,
       "GovernorAlpha::execute: proposal can only be executed if it is queued"
     );
+
     Proposal storage proposal = proposals[proposalId];
+
     proposal.executed = true;
+
+    // For any action (target, value, signature, calldata)
     for (uint256 i = 0; i < proposal.targets.length; i++) {
       timelock.executeTransaction.value(proposal.values[i])(
         proposal.targets[i],
@@ -301,14 +325,22 @@ contract GovernorAlpha {
     emit ProposalExecuted(proposalId);
   }
 
+  // In rare cases an accepted proposal can still be cancelled.
   function cancel(uint256 proposalId) public {
     ProposalState state = state(proposalId);
+
     require(
       state != ProposalState.Executed,
       "GovernorAlpha::cancel: cannot cancel executed proposal"
     );
 
     Proposal storage proposal = proposals[proposalId];
+
+    // Currently there still exists a guardian address which has the power to cancel any proposal.
+    // A proposal can also be cancelled if the original proposer looses the required amount of COMP tokens
+    // to create proposals after it was added.
+    // This is useful to prevent someone from doing a malicious proposal and immediately selling off
+    // all his COMP before the value of COMP might drop due to the malicious proposal being accepted.
     require(
       msg.sender == guardian ||
         sushi.getPriorVotes(proposal.proposer, sub256(block.number, 1)) <
@@ -317,6 +349,8 @@ contract GovernorAlpha {
     );
 
     proposal.canceled = true;
+
+    // Remove action from timelock queue
     for (uint256 i = 0; i < proposal.targets.length; i++) {
       timelock.cancelTransaction(
         proposal.targets[i],
@@ -330,6 +364,7 @@ contract GovernorAlpha {
     emit ProposalCanceled(proposalId);
   }
 
+  // Get actions from exist proposal
   function getActions(uint256 proposalId)
     public
     view
@@ -344,6 +379,7 @@ contract GovernorAlpha {
     return (p.targets, p.values, p.signatures, p.calldatas);
   }
 
+  // Get the current status of a voter
   function getReceipt(uint256 proposalId, address voter)
     public
     view
@@ -382,10 +418,14 @@ contract GovernorAlpha {
     }
   }
 
+  // Cast a vote on a proposal.
+  // The account's voting weight is determined by the number of votes
+  // the account had delegated to it at the time the proposal state became active.
   function castVote(uint256 proposalId, bool support) public {
     return _castVote(msg.sender, proposalId, support);
   }
 
+  // The same method exists also using EIP-712 signatures.
   function castVoteBySig(
     uint256 proposalId,
     bool support,
@@ -401,12 +441,15 @@ contract GovernorAlpha {
         address(this)
       )
     );
+
     bytes32 structHash = keccak256(
       abi.encode(BALLOT_TYPEHASH, proposalId, support)
     );
+
     bytes32 digest = keccak256(
       abi.encodePacked("\x19\x01", domainSeparator, structHash)
     );
+
     address signatory = ecrecover(digest, v, r, s);
     require(
       signatory != address(0),
@@ -424,12 +467,17 @@ contract GovernorAlpha {
       state(proposalId) == ProposalState.Active,
       "GovernorAlpha::_castVote: voting is closed"
     );
+
     Proposal storage proposal = proposals[proposalId];
+
     Receipt storage receipt = proposal.receipts[voter];
+
     require(
       receipt.hasVoted == false,
       "GovernorAlpha::_castVote: voter already voted"
     );
+
+    // votes for sender
     uint256 votes = sushi.getPriorVotes(voter, proposal.startBlock);
 
     if (support) {
@@ -445,22 +493,27 @@ contract GovernorAlpha {
     emit VoteCast(voter, proposalId, support, votes);
   }
 
+  // do this contract timelock admin
   function __acceptAdmin() public {
     require(
       msg.sender == guardian,
       "GovernorAlpha::__acceptAdmin: sender must be gov guardian"
     );
+
     timelock.acceptAdmin();
   }
 
+  // delete guardian address
   function __abdicate() public {
     require(
       msg.sender == guardian,
       "GovernorAlpha::__abdicate: sender must be gov guardian"
     );
+
     guardian = address(0);
   }
 
+  // placing a change request in the queue
   function __queueSetTimelockPendingAdmin(address newPendingAdmin, uint256 eta)
     public
   {
@@ -468,6 +521,7 @@ contract GovernorAlpha {
       msg.sender == guardian,
       "GovernorAlpha::__queueSetTimelockPendingAdmin: sender must be gov guardian"
     );
+
     timelock.queueTransaction(
       address(timelock),
       0,
@@ -477,6 +531,7 @@ contract GovernorAlpha {
     );
   }
 
+  // executing a change request
   function __executeSetTimelockPendingAdmin(
     address newPendingAdmin,
     uint256 eta
@@ -485,6 +540,7 @@ contract GovernorAlpha {
       msg.sender == guardian,
       "GovernorAlpha::__executeSetTimelockPendingAdmin: sender must be gov guardian"
     );
+
     timelock.executeTransaction(
       address(timelock),
       0,

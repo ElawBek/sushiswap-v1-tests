@@ -6,18 +6,16 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 // SushiToken with Governance.
+
+// The token allows delegating your voting power to some other trusted address.
+// This address can then vote with increased power.
+// Any time you may choose to re-delegate somewhere else.
 contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
   /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
   function mint(address _to, uint256 _amount) public onlyOwner {
     _mint(_to, _amount);
     _moveDelegates(address(0), _delegates[_to], _amount);
   }
-
-  // Copied and modified from YAM code:
-  // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernanceStorage.sol
-  // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernance.sol
-  // Which is copied and modified from COMPOUND:
-  // https://github.com/compound-finance/compound-protocol/blob/master/contracts/Governance/Comp.sol
 
   /// @dev A record of each accounts delegate
   mapping(address => address) internal _delegates;
@@ -73,6 +71,9 @@ contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
    * @notice Delegate votes from `msg.sender` to `delegatee`
    * @param delegatee The address to delegate votes to
    */
+  // Users can delegate their SUSHI to one other address.
+  // That address will be able to cast votes with the added voting power
+  // of their own SUSHI balances + all SUSHI balances from addresses that set that address as delegatee.
   function delegate(address delegatee) external {
     return _delegate(msg.sender, delegatee);
   }
@@ -112,12 +113,16 @@ contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
     );
 
     address signatory = ecrecover(digest, v, r, s);
+
     require(signatory != address(0), "SUSHI::delegateBySig: invalid signature");
+
     require(
       nonce == nonces[signatory]++,
       "SUSHI::delegateBySig: invalid nonce"
     );
+
     require(now <= expiry, "SUSHI::delegateBySig: signature expired");
+
     return _delegate(signatory, delegatee);
   }
 
@@ -149,6 +154,7 @@ contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
     );
 
     uint32 nCheckpoints = numCheckpoints[account];
+
     if (nCheckpoints == 0) {
       return 0;
     }
@@ -167,7 +173,9 @@ contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
     uint32 upper = nCheckpoints - 1;
     while (upper > lower) {
       uint32 center = upper - (upper - lower) / 2; // ceil, avoiding overflow
+
       Checkpoint memory cp = checkpoints[account][center];
+
       if (cp.fromBlock == blockNumber) {
         return cp.votes;
       } else if (cp.fromBlock < blockNumber) {
@@ -181,7 +189,9 @@ contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
 
   function _delegate(address delegator, address delegatee) internal {
     address currentDelegate = _delegates[delegator];
+
     uint256 delegatorBalance = balanceOf(delegator); // balance of underlying SUSHIs (not scaled);
+
     _delegates[delegator] = delegatee;
 
     emit DelegateChanged(delegator, currentDelegate, delegatee);

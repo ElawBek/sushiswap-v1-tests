@@ -22,5 +22,6 @@ module.exports = {
     ],
     camelcase: "off",
     "node/no-missing-import": "off",
+    "no-unused-vars": "off",
   },
 };
