@@ -393,7 +393,9 @@ contract GovernorAlpha {
       proposalCount >= proposalId && proposalId > 0,
       "GovernorAlpha::state: invalid proposal id"
     );
+
     Proposal storage proposal = proposals[proposalId];
+
     if (proposal.canceled) {
       return ProposalState.Canceled;
     } else if (block.number <= proposal.startBlock) {

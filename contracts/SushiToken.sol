@@ -14,6 +14,9 @@ contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
   /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
   function mint(address _to, uint256 _amount) public onlyOwner {
     _mint(_to, _amount);
+
+    // address(0) - currentDelegate
+    // _delegates[_to] - current delegate for '_to'. May be address(0
     _moveDelegates(address(0), _delegates[_to], _amount);
   }
 
@@ -75,6 +78,7 @@ contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
   // That address will be able to cast votes with the added voting power
   // of their own SUSHI balances + all SUSHI balances from addresses that set that address as delegatee.
   function delegate(address delegatee) external {
+    // msg.sender - delegator
     return _delegate(msg.sender, delegatee);
   }
 
@@ -123,6 +127,7 @@ contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
 
     require(now <= expiry, "SUSHI::delegateBySig: signature expired");
 
+    // signatory - delegator
     return _delegate(signatory, delegatee);
   }
 
@@ -188,40 +193,55 @@ contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
   }
 
   function _delegate(address delegator, address delegatee) internal {
+    // currentDelegate of delegator
     address currentDelegate = _delegates[delegator];
 
-    uint256 delegatorBalance = balanceOf(delegator); // balance of underlying SUSHIs (not scaled);
+    // current balance of delegator
+    // balance of underlying SUSHIs (not scaled);
+    uint256 delegatorBalance = balanceOf(delegator);
 
+    // change delegate for delegator
     _delegates[delegator] = delegatee;
 
     emit DelegateChanged(delegator, currentDelegate, delegatee);
 
+    // accept change
     _moveDelegates(currentDelegate, delegatee, delegatorBalance);
   }
 
   function _moveDelegates(
-    address srcRep,
-    address dstRep,
-    uint256 amount
+    address srcRep, // old delegate
+    address dstRep, // new delegate
+    uint256 amount // balance of delegator
   ) internal {
     if (srcRep != dstRep && amount > 0) {
+      // if old delegate != address(0)
       if (srcRep != address(0)) {
-        // decrease old representative
         uint32 srcRepNum = numCheckpoints[srcRep];
+
+        // if num of checkpoints != 0 => decrease old representative
         uint256 srcRepOld = srcRepNum > 0
           ? checkpoints[srcRep][srcRepNum - 1].votes
           : 0;
+
         uint256 srcRepNew = srcRepOld.sub(amount);
+
+        // write new checkpoint for old delegate
         _writeCheckpoint(srcRep, srcRepNum, srcRepOld, srcRepNew);
       }
 
+      // if new delegate != address(0)
       if (dstRep != address(0)) {
-        // increase new representative
         uint32 dstRepNum = numCheckpoints[dstRep];
+
+        // if num of checkpoints != 0 => increase new representative
         uint256 dstRepOld = dstRepNum > 0
           ? checkpoints[dstRep][dstRepNum - 1].votes
           : 0;
+
         uint256 dstRepNew = dstRepOld.add(amount);
+
+        // write new checkpoint for new delegate
         _writeCheckpoint(dstRep, dstRepNum, dstRepOld, dstRepNew);
       }
     }
@@ -238,12 +258,14 @@ contract SushiToken is ERC20("SushiToken", "SUSHI"), Ownable {
       "SUSHI::_writeCheckpoint: block number exceeds 32 bits"
     );
 
+    // if action in current block => rewrite votes
     if (
       nCheckpoints > 0 &&
       checkpoints[delegatee][nCheckpoints - 1].fromBlock == blockNumber
     ) {
       checkpoints[delegatee][nCheckpoints - 1].votes = newVotes;
     } else {
+      // else write new checkpoint with current blockNumber and amount of votes
       checkpoints[delegatee][nCheckpoints] = Checkpoint(blockNumber, newVotes);
       numCheckpoints[delegatee] = nCheckpoints + 1;
     }
