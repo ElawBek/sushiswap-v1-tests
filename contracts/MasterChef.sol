@@ -109,17 +109,23 @@ contract MasterChef is Ownable {
   // Add a new lp to the pool. Can only be called by the owner.
   // XXX DO NOT add the same LP token more than once. Rewards will be messed up if you do.
   function add(
-    uint256 _allocPoint,
+    uint256 _allocPoint, // reward for pool
     IERC20 _lpToken,
-    bool _withUpdate
+    bool _withUpdate // TODO
   ) public onlyOwner {
     if (_withUpdate) {
-      massUpdatePools();
+      massUpdatePools(); // TODO
     }
+
+    // for poolInfo
     uint256 lastRewardBlock = block.number > startBlock
       ? block.number
       : startBlock;
+
+    // increment totalAllocPoint
     totalAllocPoint = totalAllocPoint.add(_allocPoint);
+
+    // add pool to MasterChef
     poolInfo.push(
       PoolInfo({
         lpToken: _lpToken,
@@ -132,16 +138,20 @@ contract MasterChef is Ownable {
 
   // Update the given pool's SUSHI allocation point. Can only be called by the owner.
   function set(
-    uint256 _pid,
+    uint256 _pid, // pool id
     uint256 _allocPoint,
-    bool _withUpdate
+    bool _withUpdate // TODO
   ) public onlyOwner {
     if (_withUpdate) {
-      massUpdatePools();
+      massUpdatePools(); // TODO
     }
+
+    // update totalAllocPoint
     totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(
       _allocPoint
     );
+
+    // update allocPoint in the poolInfo
     poolInfo[_pid].allocPoint = _allocPoint;
   }
 
@@ -151,14 +161,23 @@ contract MasterChef is Ownable {
   }
 
   // Migrate lp token to another lp contract. Can be called by anyone. We trust that migrator contract is good.
+  // TODO
   function migrate(uint256 _pid) public {
+    // only migrator
     require(address(migrator) != address(0), "migrate: no migrator");
+
     PoolInfo storage pool = poolInfo[_pid];
+
     IERC20 lpToken = pool.lpToken;
+
     uint256 bal = lpToken.balanceOf(address(this));
+
     lpToken.safeApprove(address(migrator), bal);
+
     IERC20 newLpToken = migrator.migrate(lpToken);
+
     require(bal == newLpToken.balanceOf(address(this)), "migrate: bad");
+
     pool.lpToken = newLpToken;
   }
 
@@ -187,22 +206,30 @@ contract MasterChef is Ownable {
     returns (uint256)
   {
     PoolInfo storage pool = poolInfo[_pid];
+
     UserInfo storage user = userInfo[_pid][_user];
+
     uint256 accSushiPerShare = pool.accSushiPerShare;
+
     uint256 lpSupply = pool.lpToken.balanceOf(address(this));
+
     if (block.number > pool.lastRewardBlock && lpSupply != 0) {
       uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
+
       uint256 sushiReward = multiplier
         .mul(sushiPerBlock)
         .mul(pool.allocPoint)
         .div(totalAllocPoint);
+
       accSushiPerShare = accSushiPerShare.add(
         sushiReward.mul(1e12).div(lpSupply)
       );
     }
+
     return user.amount.mul(accSushiPerShare).div(1e12).sub(user.rewardDebt);
   }
 
+  // TODO
   // Update reward variables for all pools. Be careful of gas spending!
   function massUpdatePools() public {
     uint256 length = poolInfo.length;
@@ -211,35 +238,59 @@ contract MasterChef is Ownable {
     }
   }
 
-  // Update reward variables of the given pool to be up-to-date.
+  // Ongoing pools can be updated and then mint SUSHI
+  // to the people staking the LP tokens using updatePool.
   function updatePool(uint256 _pid) public {
     PoolInfo storage pool = poolInfo[_pid];
+
+    // if updae twice per block => nothing
     if (block.number <= pool.lastRewardBlock) {
       return;
     }
+
+    // supply LP token in MasterChef
     uint256 lpSupply = pool.lpToken.balanceOf(address(this));
+
     if (lpSupply == 0) {
       pool.lastRewardBlock = block.number;
       return;
     }
+
+    // The newly minted SUSHI amount per pool depends on the passed blocks since the last update and the set allocation points for the pool
     uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
+
     uint256 sushiReward = multiplier
       .mul(sushiPerBlock)
       .mul(pool.allocPoint)
       .div(totalAllocPoint);
+
+    // devaddr receive 9% of reward
     sushi.mint(devaddr, sushiReward.div(10));
+
+    // mint SUSHI to MasterChef
     sushi.mint(address(this), sushiReward);
+
+    // how much SUSHI the pool has received
     pool.accSushiPerShare = pool.accSushiPerShare.add(
       sushiReward.mul(1e12).div(lpSupply)
     );
+
+    // update lastRewardBlock to current block.number
     pool.lastRewardBlock = block.number;
   }
 
   // Deposit LP tokens to MasterChef for SUSHI allocation.
+  // Using the deposit function users can stake their LP tokens for the provided pool.
+  // This will put the user's LP token into the MasterChef contract.
   function deposit(uint256 _pid, uint256 _amount) public {
     PoolInfo storage pool = poolInfo[_pid];
+
     UserInfo storage user = userInfo[_pid][msg.sender];
+
+    // any deposit execute this function for update pool
     updatePool(_pid);
+
+    // if user has any amount, he receive his pending reward for this pool
     if (user.amount > 0) {
       uint256 pending = user.amount.mul(pool.accSushiPerShare).div(1e12).sub(
         user.rewardDebt
@@ -248,46 +299,72 @@ contract MasterChef is Ownable {
         safeSushiTransfer(msg.sender, pending);
       }
     }
+
+    // transfer _amount of LP to MasterChef
     if (_amount > 0) {
       pool.lpToken.safeTransferFrom(
         address(msg.sender),
         address(this),
         _amount
       );
+
+      // update userInfo
       user.amount = user.amount.add(_amount);
     }
+
     user.rewardDebt = user.amount.mul(pool.accSushiPerShare).div(1e12);
+
     emit Deposit(msg.sender, _pid, _amount);
   }
 
   // Withdraw LP tokens from MasterChef.
+  // Using the withdraw function users can unstake their LP tokens for the provided pool
   function withdraw(uint256 _pid, uint256 _amount) public {
     PoolInfo storage pool = poolInfo[_pid];
+
     UserInfo storage user = userInfo[_pid][msg.sender];
+
     require(user.amount >= _amount, "withdraw: not good");
+
+    // any withdraw execute this function for update pool
     updatePool(_pid);
+
+    // calculate reward for user
     uint256 pending = user.amount.mul(pool.accSushiPerShare).div(1e12).sub(
       user.rewardDebt
     );
+
+    // get their share of newly minted SUSHI tokens
     if (pending > 0) {
       safeSushiTransfer(msg.sender, pending);
     }
+
+    // receive their original LP tokens
     if (_amount > 0) {
       user.amount = user.amount.sub(_amount);
       pool.lpToken.safeTransfer(address(msg.sender), _amount);
     }
+
+    // update userInfo
     user.rewardDebt = user.amount.mul(pool.accSushiPerShare).div(1e12);
+
     emit Withdraw(msg.sender, _pid, _amount);
   }
 
   // Withdraw without caring about rewards. EMERGENCY ONLY.
   function emergencyWithdraw(uint256 _pid) public {
     PoolInfo storage pool = poolInfo[_pid];
+
     UserInfo storage user = userInfo[_pid][msg.sender];
+
     uint256 amount = user.amount;
+
     user.amount = 0;
+
     user.rewardDebt = 0;
+
     pool.lpToken.safeTransfer(address(msg.sender), amount);
+
     emit EmergencyWithdraw(msg.sender, _pid, amount);
   }
 
