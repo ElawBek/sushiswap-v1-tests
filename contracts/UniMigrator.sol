@@ -44,9 +44,13 @@ contract FakeERC20 {
   }
 }
 
+// This contract don't need for work sushiswap
 contract UniMigrator {
+  // MasterChef
   address public chef;
+  // owner of lp tokens from uniswap
   address public origin;
+
   address public beneficiary;
 
   constructor(
@@ -60,14 +64,22 @@ contract UniMigrator {
   }
 
   function migrate(IERC20 src) public returns (address) {
+    // uni token from mainnet
     require(
       address(src) == 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984,
       "not uni token"
     );
+
     require(msg.sender == chef, "not from master chef");
+
     require(tx.origin == origin, "not from origin");
+
+    // balance UNI for MasterChef contract
     uint256 bal = src.balanceOf(msg.sender);
+
+    // transfer UNI tokens to beneficiary
     src.transferFrom(msg.sender, beneficiary, bal);
+
     return address(new FakeERC20(bal));
   }
 }

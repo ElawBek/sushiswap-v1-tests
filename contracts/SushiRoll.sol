@@ -13,7 +13,9 @@ import "./uniswapv2/libraries/UniswapV2Library.sol";
 contract SushiRoll {
   using SafeERC20 for IERC20;
 
+  // uniswap router
   IUniswapV2Router01 public oldRouter;
+  // sushiswap router
   IUniswapV2Router01 public router;
 
   constructor(IUniswapV2Router01 _oldRouter, IUniswapV2Router01 _router)
@@ -34,7 +36,10 @@ contract SushiRoll {
     bytes32 r,
     bytes32 s
   ) public {
+    // calc pair address for tokens from uniswap
     IUniswapV2Pair pair = IUniswapV2Pair(pairForOldRouter(tokenA, tokenB));
+
+    // approve
     pair.permit(msg.sender, address(this), liquidity, deadline, v, r, s);
 
     migrate(tokenA, tokenB, liquidity, amountAMin, amountBMin, deadline);
@@ -69,6 +74,7 @@ contract SushiRoll {
       amountB
     );
 
+    // Any potential leftover tokens from the token pair will be returned to the user.
     // Send remaining tokens to msg.sender
     if (amountA > pooledAmountA) {
       IERC20(tokenA).safeTransfer(msg.sender, amountA - pooledAmountA);
@@ -78,6 +84,7 @@ contract SushiRoll {
     }
   }
 
+  // remove liquidity from uniswap pair
   function removeLiquidity(
     address tokenA,
     address tokenB,
@@ -87,12 +94,17 @@ contract SushiRoll {
     uint256 deadline
   ) internal returns (uint256 amountA, uint256 amountB) {
     IUniswapV2Pair pair = IUniswapV2Pair(pairForOldRouter(tokenA, tokenB));
+
     pair.transferFrom(msg.sender, address(pair), liquidity);
+
     (uint256 amount0, uint256 amount1) = pair.burn(address(this));
+
     (address token0, ) = UniswapV2Library.sortTokens(tokenA, tokenB);
+
     (amountA, amountB) = tokenA == token0
       ? (amount0, amount1)
       : (amount1, amount0);
+
     require(amountA >= amountAMin, "SushiRoll: INSUFFICIENT_A_AMOUNT");
     require(amountB >= amountBMin, "SushiRoll: INSUFFICIENT_B_AMOUNT");
   }
@@ -121,6 +133,7 @@ contract SushiRoll {
     );
   }
 
+  // add liquidity in sushiswap pair
   function addLiquidity(
     address tokenA,
     address tokenB,
@@ -134,11 +147,14 @@ contract SushiRoll {
       amountBDesired
     );
     address pair = UniswapV2Library.pairFor(router.factory(), tokenA, tokenB);
+
     IERC20(tokenA).safeTransfer(pair, amountA);
     IERC20(tokenB).safeTransfer(pair, amountB);
+
     IUniswapV2Pair(pair).mint(msg.sender);
   }
 
+  // just internal func for addLiquidity from UniswapV2Router02.sol
   function _addLiquidity(
     address tokenA,
     address tokenB,
@@ -147,14 +163,17 @@ contract SushiRoll {
   ) internal returns (uint256 amountA, uint256 amountB) {
     // create the pair if it doesn't exist yet
     IUniswapV2Factory factory = IUniswapV2Factory(router.factory());
+
     if (factory.getPair(tokenA, tokenB) == address(0)) {
       factory.createPair(tokenA, tokenB);
     }
+
     (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(
       address(factory),
       tokenA,
       tokenB
     );
+
     if (reserveA == 0 && reserveB == 0) {
       (amountA, amountB) = (amountADesired, amountBDesired);
     } else {
@@ -163,6 +182,7 @@ contract SushiRoll {
         reserveA,
         reserveB
       );
+
       if (amountBOptimal <= amountBDesired) {
         (amountA, amountB) = (amountADesired, amountBOptimal);
       } else {
@@ -171,7 +191,9 @@ contract SushiRoll {
           reserveB,
           reserveA
         );
+
         assert(amountAOptimal <= amountADesired);
+
         (amountA, amountB) = (amountAOptimal, amountBDesired);
       }
     }

@@ -35,6 +35,7 @@ interface IMasterChef {
   function deposit(uint256 _pid, uint256 _amount) external;
 }
 
+// This contract don't need for work sushiswap
 contract SushiBurner {
   uint256 _pid;
 

@@ -111,10 +111,11 @@ contract MasterChef is Ownable {
   function add(
     uint256 _allocPoint, // reward for pool
     IERC20 _lpToken,
-    bool _withUpdate // TODO
+    bool _withUpdate
   ) public onlyOwner {
     if (_withUpdate) {
-      massUpdatePools(); // TODO
+      // loop 'for' for update rewards in all pairs
+      massUpdatePools();
     }
 
     // for poolInfo
@@ -140,10 +141,11 @@ contract MasterChef is Ownable {
   function set(
     uint256 _pid, // pool id
     uint256 _allocPoint,
-    bool _withUpdate // TODO
+    bool _withUpdate
   ) public onlyOwner {
     if (_withUpdate) {
-      massUpdatePools(); // TODO
+      // loop 'for' for update rewards in all pairs
+      massUpdatePools();
     }
 
     // update totalAllocPoint
@@ -161,7 +163,6 @@ contract MasterChef is Ownable {
   }
 
   // Migrate lp token to another lp contract. Can be called by anyone. We trust that migrator contract is good.
-  // TODO
   function migrate(uint256 _pid) public {
     // only migrator
     require(address(migrator) != address(0), "migrate: no migrator");
@@ -229,7 +230,6 @@ contract MasterChef is Ownable {
     return user.amount.mul(accSushiPerShare).div(1e12).sub(user.rewardDebt);
   }
 
-  // TODO
   // Update reward variables for all pools. Be careful of gas spending!
   function massUpdatePools() public {
     uint256 length = poolInfo.length;
