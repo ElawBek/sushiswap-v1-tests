@@ -3,7 +3,7 @@ import { ethers } from "hardhat";
 
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 
-import { BigNumber, constants } from "ethers";
+import { constants } from "ethers";
 import { parseEther } from "ethers/lib/utils";
 
 import {
@@ -202,7 +202,7 @@ describe("app", () => {
       ercToErcPair = new UniswapV2Pair__factory(owner).attach(createdPair);
     });
 
-    it("Simple enter and leave ", async () => {
+    it("Simple enter and leave", async () => {
       // allow the SushiBar contract to use the Alice's and Bob's sushiToken
       await sushi.connect(alice).approve(bar.address, parseEther("50"));
       await sushi.connect(bob).approve(bar.address, parseEther("30"));

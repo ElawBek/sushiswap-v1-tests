@@ -251,6 +251,7 @@ contract MasterChef is Ownable {
     // supply LP token in MasterChef
     uint256 lpSupply = pool.lpToken.balanceOf(address(this));
 
+    // If no pool's token in the chef contract
     if (lpSupply == 0) {
       pool.lastRewardBlock = block.number;
       return;

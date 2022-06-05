@@ -226,7 +226,7 @@ contract Timelock {
     }
 
     // execute tx
-    (bool success, bytes memory returnData) = target.call.value(value)(
+    (bool success, bytes memory returnData) = target.call{ value: value }(
       callData
     );
 
