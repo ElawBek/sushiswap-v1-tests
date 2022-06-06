@@ -224,7 +224,7 @@ describe("app", () => {
       tkn1ToTkn2Pair = new UniswapV2Pair__factory(owner).attach(createdPair);
     });
 
-    xit("Add pools to Chef and change its allocPoint", async () => {
+    it("Add pools to Chef and change its allocPoint", async () => {
       // not owner can't call this function
       await expect(
         chef.connect(alice).add(parseEther("1"), tkn1ToTkn2Pair.address, false)
@@ -329,19 +329,19 @@ describe("app", () => {
 
         // Alice withdraw own reward:
         /*
-          in function updatePool:
-            (before 250 block multiplier exists)
-            sushiReward = multiplier * sushiPerBlock * pool.allocPoint / totalAllocPoint
-            sushiReward = 110 * 10e18 * 1e18 / 5e18 = 220e18
+        in function updatePool:
+          (before 250 block multiplier exists)
+          sushiReward = multiplier * sushiPerBlock * pool.allocPoint / totalAllocPoint
+          sushiReward = 110 * 10e18 * 1e18 / 5e18 = 220e18
 
-            pool.accSushiPerShare = (pool.accSushiPerShare + sushiReward) * 1e12 / lpSupply
-            pool.accSushiPerShare = 400000000000 + (220e18 * 1e12 / 199.999999999999999000e18)
-            = 1500000000000
+          pool.accSushiPerShare = (pool.accSushiPerShare + sushiReward) * 1e12 / lpSupply
+          pool.accSushiPerShare = 400000000000 + (220e18 * 1e12 / 199.999999999999999000e18)
+          = 1500000000000
 
-          in function withdraw:
-            pending = user.amount * pool.accSushiPerShare / 1e12 - user.rewardDebt
-            pending = 99.999999999999999000e18 * 1500000000000 / 1e12 - 0 =
-            = 149.999999999999998500
+        in function withdraw:
+          pending = user.amount * pool.accSushiPerShare / 1e12 - user.rewardDebt
+          pending = 99.999999999999999000e18 * 1500000000000 / 1e12 - 0 =
+          = 149.999999999999998500
         */
 
         await expect(() => chef.connect(alice).withdraw(0, 0))
@@ -351,6 +351,96 @@ describe("app", () => {
             alice,
             parseEther("149.999999999999998500")
           );
+      });
+
+      it("With repeated deposit user should claim rewards", async () => {
+        // Alice deposit half of own SUSHI-WETH LPs
+        const aliceLP = parseEther("125");
+
+        await sushiToWethPair.connect(alice).approve(chef.address, aliceLP);
+
+        await chef.connect(alice).deposit(1, aliceLP);
+
+        // repeat deposit after 10 blocks
+        await network.provider.send("hardhat_mine", ["0xa"]);
+
+        // 1 block
+        await sushiToWethPair.connect(alice).approve(chef.address, aliceLP);
+
+        // multiplier from lastRewardBlock to currentPendingBlock === 120
+        expect(
+          await chef.getMultiplier(
+            (
+              await chef.poolInfo(1)
+            ).lastRewardBlock,
+            (await ethers.provider.getBlockNumber()) + 1
+          )
+        ).to.be.eq(120);
+
+        // calculate user's reward from lastRewardBlock to lastMinedBlock
+        expect(await chef.pendingSushi(1, alice.address)).to.be.eq(
+          parseEther("880")
+        );
+
+        /*
+        in function updatePool:
+          (before 250 block multiplier exists)
+          sushiReward = multiplier * sushiPerBlock * pool.allocPoint / totalAllocPoint
+          sushiReward = 120 * 10e18 * 4e18 / 5e18 = 960e18
+
+          pool.accSushiPerShare = (pool.accSushiPerShare + sushiReward) * 1e12 / lpSupply
+          pool.accSushiPerShare = 0 + (960e18 * 1e12 / 125e18) =
+          = 7680000000000
+
+        in function withdraw:
+          pending = user.amount * pool.accSushiPerShare / 1e12 - user.rewardDebt
+          pending = 125e18 * 7680000000000 / 1e12 - 0 =
+          = 960e18
+        */
+        await expect(() =>
+          chef.connect(alice).deposit(1, aliceLP)
+        ).to.changeTokenBalance(sushi, alice, parseEther("960"));
+      });
+
+      it("Change dev address", async () => {
+        await expect(chef.connect(alice).dev(alice.address)).to.be.revertedWith(
+          "dev: wut?"
+        );
+
+        await chef.dev(alice.address);
+
+        expect(await chef.devaddr()).to.be.eq(alice.address);
+      });
+
+      it("Emergency withdraw", async () => {
+        // Alice deposit some LP TKN1-TKN2
+        await tkn1ToTkn2Pair
+          .connect(alice)
+          .approve(chef.address, parseEther("50"));
+
+        await chef.connect(alice).deposit(0, parseEther("50"));
+
+        // After 10 blocks Alice emergency withdraw all own liquidity
+        await network.provider.send("hardhat_mine", ["0xa"]);
+
+        // user reward === 200 SUSHI
+        const sushiBeforeEmergencyWithdraw = await sushi.balanceOf(
+          alice.address
+        );
+
+        await expect(() => chef.connect(alice).emergencyWithdraw(0))
+          .to.emit(chef, "EmergencyWithdraw")
+          .withArgs(alice.address, 0, parseEther("50"))
+          .to.changeTokenBalance(tkn1ToTkn2Pair, alice, parseEther("50"));
+
+        const sushiAfterEmergencyWithdraw = await sushi.balanceOf(
+          alice.address
+        );
+
+        // The reward was not withdrawn
+        expect(sushiBeforeEmergencyWithdraw).to.be.eq(
+          sushiAfterEmergencyWithdraw
+        );
       });
     });
   });
