@@ -9,7 +9,7 @@ import "./uniswapv2/interfaces/IUniswapV2Router01.sol";
 import "./uniswapv2/interfaces/IUniswapV2Factory.sol";
 import "./uniswapv2/libraries/UniswapV2Library.sol";
 
-// SushiRoll helps your migrate your existing Uniswap LP tokens to SushiSwap LP ones
+// SushiRoll helps your migrate your existing Uniswap LP tokens to Sushiswap LP ones
 contract SushiRoll {
   using SafeERC20 for IERC20;
 
@@ -126,7 +126,7 @@ contract SushiRoll {
             hex"ff",
             oldRouter.factory(),
             keccak256(abi.encodePacked(token0, token1)),
-            hex"96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f" // init code hash
+            hex"24ced40395725c17f756437207ecf54f5c8fa1d83f1edcb41a39b520bb9e878c" // init code hash
           )
         )
       )

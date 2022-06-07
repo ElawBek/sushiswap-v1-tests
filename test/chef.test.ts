@@ -4,7 +4,7 @@ import { ethers, network } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 
 import { BigNumber, constants } from "ethers";
-import { parseEther, formatEther } from "ethers/lib/utils";
+import { parseEther } from "ethers/lib/utils";
 
 import {
   WETH,
@@ -84,7 +84,7 @@ describe("app", () => {
     // mint sushi to owner account for create SUSHI/WETH pair
     await sushi.mint(owner.address, parseEther("1000"));
 
-    // mint initial supply of sushi to users for add to SUSHI/WETH pair
+    // mint initial supply of sushi to users for add liquidity to SUSHI/WETH pair
     await sushi.mint(alice.address, parseEther("500"));
     await sushi.mint(bob.address, parseEther("500"));
 
@@ -118,7 +118,7 @@ describe("app", () => {
     let sushiToWethPair: UniswapV2Pair;
 
     beforeEach(async () => {
-      // allow router to use owner's sushis for create pairs
+      // allow router to use owner's sushis for create pair
       await sushi.approve(router.address, parseEther("1000"));
 
       // allow router to use Alice's and Bob's sushis for add liquidity
@@ -162,7 +162,7 @@ describe("app", () => {
           { value: parseEther("125") }
         );
 
-      // do sushi-weth pair contract callable (It can be useful)
+      // do sushi-weth pair contract callable
       const createdSushiToWethPairAddress = await router.getPairAddress(
         sushi.address,
         weth.address
@@ -327,6 +327,16 @@ describe("app", () => {
         // after 10 blocks
         await network.provider.send("hardhat_mine", ["0xa"]);
 
+        // Multiplier === 110
+        expect(
+          await chef.getMultiplier(
+            (
+              await chef.poolInfo(0)
+            ).lastRewardBlock,
+            (await ethers.provider.getBlockNumber()) + 1
+          )
+        ).to.be.eq(110);
+
         // Alice withdraw own reward:
         /*
         in function updatePool:
@@ -400,6 +410,11 @@ describe("app", () => {
         await expect(() =>
           chef.connect(alice).deposit(1, aliceLP)
         ).to.changeTokenBalance(sushi, alice, parseEther("960"));
+
+        // Alice's deposited amount
+        expect((await chef.userInfo(1, alice.address)).amount).to.be.eq(
+          parseEther("250")
+        );
       });
 
       it("Change dev address", async () => {
