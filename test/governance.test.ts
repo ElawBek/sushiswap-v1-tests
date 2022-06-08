@@ -120,9 +120,6 @@ describe("Governance", () => {
       const deadline =
         (await ethers.provider.getBlock("latest")).timestamp + 1000;
 
-      // change owner MasterChef --> Timelock contract
-      await chef.transferOwnership(timelock.address);
-
       // add three pair
       await tokenOne.connect(alice).approve(router.address, parseEther("1000"));
       await tokenTwo.connect(alice).approve(router.address, parseEther("1000"));
@@ -226,11 +223,15 @@ describe("Governance", () => {
     });
 
     it("Add pools to chef", async () => {
+      // change owner MasterChef --> Timelock contract
+      await chef.transferOwnership(timelock.address);
+
       // Not owner can't execute this function
       await expect(
         chef.add(parseEther("1"), tkn1ToTkn2Pair.address, false)
       ).to.be.revertedWith("Ownable: caller is not the owner");
 
+      // do user's sushis votable
       await sushi.connect(bob).delegate(bob.address);
       await sushi.connect(alice).delegate(alice.address);
 
@@ -238,6 +239,7 @@ describe("Governance", () => {
 
       const encode = new AbiCoder();
 
+      // encode datas for add pools to chef
       const data1 = encode.encode(
         ["uint256", "address", "bool"],
         [parseEther("1"), tkn1ToTkn2Pair.address, false]
@@ -260,6 +262,7 @@ describe("Governance", () => {
       ];
       const callDatas = [data1, data2, data3];
 
+      // create propose
       await expect(
         governor
           .connect(bob)
@@ -284,39 +287,132 @@ describe("Governance", () => {
           "Add three pools to the chef" // description
         );
 
+      // check propose's status
       expect(await governor.state(1)).to.be.eq(proposalState.Pending);
 
       await network.provider.send("hardhat_mine", ["0x2"]);
 
       expect(await governor.state(1)).to.be.eq(proposalState.Active);
 
+      // vote for
       await governor.connect(bob).castVote(1, true);
 
+      // can't repeat vote
       await expect(governor.connect(bob).castVote(1, true)).to.be.revertedWith(
         "GovernorAlpha::_castVote: voter already voted"
       );
 
-      // end vote
+      // end vote +17281 block
       await network.provider.send("hardhat_mine", ["0x4381"]);
 
+      // check propose's status
       expect(await governor.state(1)).to.be.eq(proposalState.Succeeded);
 
+      // send propose to timelock's queue
       await governor.connect(alice).queue(1);
 
       expect(await governor.state(1)).to.be.eq(proposalState.Queued);
 
+      // can't execute before end timelock
       await expect(governor.connect(alice).execute(1)).to.be.revertedWith(
         "Timelock::executeTransaction: Transaction hasn't surpassed time lock."
       );
 
+      // +3 days
       await network.provider.send("evm_increaseTime", [259200]);
       await network.provider.send("evm_mine");
 
+      // execute propose
       await governor.connect(alice).execute(1);
 
+      // status
       expect(await governor.state(1)).to.be.eq(proposalState.Executed);
 
+      // check execution's result
       expect(await chef.poolLength()).to.be.eq(3);
+    });
+
+    it("Change alloc point in an existing pool", async () => {
+      // add pool to chef
+      await chef.add(parseEther("11"), tkn1ToTkn2Pair.address, false);
+
+      expect((await chef.poolInfo(0)).allocPoint).to.be.eq(parseEther("11"));
+
+      // change owner MasterChef --> Timelock contract
+      await chef.transferOwnership(timelock.address);
+
+      // do user's sushis votable
+      await sushi.connect(bob).delegate(bob.address);
+      await sushi.connect(alice).delegate(alice.address);
+
+      await network.provider.send("hardhat_mine", ["0x1"]);
+
+      const encode = new AbiCoder();
+
+      // encode datas for add pools to chef
+      const data = encode.encode(
+        ["uint256", "uint256", "bool"],
+        [0, parseEther("10"), false]
+      );
+
+      const targets = [chef.address];
+      const values = [0];
+      const signatures = ["set(uint256,uint256,bool)"];
+      const callDatas = [data];
+
+      // create propose
+      await expect(
+        governor
+          .connect(alice)
+          .propose(targets, values, signatures, callDatas, "Set alloc point")
+      )
+        .to.emit(governor, "ProposalCreated")
+        .withArgs(
+          1, // id
+          alice.address, // msg.sender
+          targets,
+          values,
+          signatures,
+          callDatas,
+          17355, // startBlock
+          34635, // endBlock
+          "Set alloc point" // description
+        );
+
+      // check propose's status
+      expect(await governor.state(1)).to.be.eq(proposalState.Pending);
+
+      await network.provider.send("hardhat_mine", ["0x2"]);
+
+      expect(await governor.state(1)).to.be.eq(proposalState.Active);
+
+      // vote for
+      await governor.connect(bob).castVote(1, true);
+      await governor.connect(alice).castVote(1, true);
+
+      // end vote +17281 block
+      await network.provider.send("hardhat_mine", ["0x4381"]);
+
+      // check propose's status
+      expect(await governor.state(1)).to.be.eq(proposalState.Succeeded);
+
+      // send propose to timelock's queue
+      await governor.connect(alice).queue(1);
+
+      expect(await governor.state(1)).to.be.eq(proposalState.Queued);
+
+      // +3 days
+      await network.provider.send("evm_increaseTime", [259200]);
+      await network.provider.send("evm_mine");
+
+      // execute propose
+      await governor.connect(alice).execute(1);
+
+      // status
+      expect(await governor.state(1)).to.be.eq(proposalState.Executed);
+
+      // check execution result
+      expect((await chef.poolInfo(0)).allocPoint).to.be.eq(parseEther("10"));
     });
   });
 });
