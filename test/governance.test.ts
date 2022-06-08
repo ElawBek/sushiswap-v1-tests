@@ -27,6 +27,17 @@ import {
   Timelock__factory,
 } from "../typechain-types";
 
+const proposalState = {
+  Pending: 0,
+  Active: 1,
+  Canceled: 2,
+  Defeated: 3,
+  Succeeded: 4,
+  Queued: 5,
+  Expired: 6,
+  Executed: 7,
+};
+
 describe("Governance", () => {
   let owner: SignerWithAddress;
   let alice: SignerWithAddress;
@@ -221,9 +232,9 @@ describe("Governance", () => {
       ).to.be.revertedWith("Ownable: caller is not the owner");
 
       await sushi.connect(bob).delegate(bob.address);
-      await sushi.connect(alice).delegate(bob.address);
+      await sushi.connect(alice).delegate(alice.address);
 
-      await network.provider.send("hardhat_mine", ["0x2"]);
+      await network.provider.send("hardhat_mine", ["0x1"]);
 
       const encode = new AbiCoder();
 
@@ -243,23 +254,69 @@ describe("Governance", () => {
       const targets = [chef.address, chef.address, chef.address];
       const values = [0, 0, 0];
       const signatures = [
-        "add(uint256,IERC20,bool)",
-        "add(uint256,IERC20,bool)",
-        "add(uint256,IERC20,bool)",
+        "add(uint256,address,bool)",
+        "add(uint256,address,bool)",
+        "add(uint256,address,bool)",
       ];
       const callDatas = [data1, data2, data3];
 
-      await governor
-        .connect(bob)
-        .propose(
+      await expect(
+        governor
+          .connect(bob)
+          .propose(
+            targets,
+            values,
+            signatures,
+            callDatas,
+            "Add three pools to the chef"
+          )
+      )
+        .to.emit(governor, "ProposalCreated")
+        .withArgs(
+          1, // id
+          bob.address, // msg.sender
           targets,
           values,
           signatures,
           callDatas,
-          "Add three pools to the chef"
+          34, // startBlock
+          17314, // endBlock
+          "Add three pools to the chef" // description
         );
 
-      console.log(await governor.proposals(0));
+      expect(await governor.state(1)).to.be.eq(proposalState.Pending);
+
+      await network.provider.send("hardhat_mine", ["0x2"]);
+
+      expect(await governor.state(1)).to.be.eq(proposalState.Active);
+
+      await governor.connect(bob).castVote(1, true);
+
+      await expect(governor.connect(bob).castVote(1, true)).to.be.revertedWith(
+        "GovernorAlpha::_castVote: voter already voted"
+      );
+
+      // end vote
+      await network.provider.send("hardhat_mine", ["0x4381"]);
+
+      expect(await governor.state(1)).to.be.eq(proposalState.Succeeded);
+
+      await governor.connect(alice).queue(1);
+
+      expect(await governor.state(1)).to.be.eq(proposalState.Queued);
+
+      await expect(governor.connect(alice).execute(1)).to.be.revertedWith(
+        "Timelock::executeTransaction: Transaction hasn't surpassed time lock."
+      );
+
+      await network.provider.send("evm_increaseTime", [259200]);
+      await network.provider.send("evm_mine");
+
+      await governor.connect(alice).execute(1);
+
+      expect(await governor.state(1)).to.be.eq(proposalState.Executed);
+
+      expect(await chef.poolLength()).to.be.eq(3);
     });
   });
 });
