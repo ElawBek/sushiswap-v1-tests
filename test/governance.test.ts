@@ -237,18 +237,18 @@ describe("Governance", () => {
 
       await network.provider.send("hardhat_mine", ["0x1"]);
 
-      const encode = new AbiCoder();
+      const encoder = new AbiCoder();
 
       // encode datas for add pools to chef
-      const data1 = encode.encode(
+      const data1 = encoder.encode(
         ["uint256", "address", "bool"],
         [parseEther("1"), tkn1ToTkn2Pair.address, false]
       );
-      const data2 = encode.encode(
+      const data2 = encoder.encode(
         ["uint256", "address", "bool"],
         [parseEther("2"), tkn1ToWethPair.address, false]
       );
-      const data3 = encode.encode(
+      const data3 = encoder.encode(
         ["uint256", "address", "bool"],
         [parseEther("2"), tkn2ToWethPair.address, false]
       );
@@ -347,10 +347,10 @@ describe("Governance", () => {
 
       await network.provider.send("hardhat_mine", ["0x1"]);
 
-      const encode = new AbiCoder();
+      const encoder = new AbiCoder();
 
-      // encode datas for add pools to chef
-      const data = encode.encode(
+      // encode datas for set alloc point
+      const data = encoder.encode(
         ["uint256", "uint256", "bool"],
         [0, parseEther("10"), false]
       );
@@ -413,6 +413,119 @@ describe("Governance", () => {
 
       // check execution result
       expect((await chef.poolInfo(0)).allocPoint).to.be.eq(parseEther("10"));
+    });
+  });
+
+  describe("Timelock", () => {
+    beforeEach(async () => {
+      // do user's sushis votable
+      await sushi.connect(bob).delegate(bob.address);
+      await sushi.connect(alice).delegate(alice.address);
+
+      const encoder = new AbiCoder();
+
+      // encode datas for set new delay
+      const data = encoder.encode(["uint256"], [259200]);
+
+      const targets = [timelock.address];
+      const values = [0];
+      const signatures = ["setDelay(uint256)"];
+      const callDatas = [data];
+
+      // bob create a propose
+      await governor
+        .connect(bob)
+        .propose(targets, values, signatures, callDatas, "Set timelock delay");
+
+      await network.provider.send("hardhat_mine", ["0x2"]);
+    });
+
+    it("Cancel vote", async () => {
+      expect(await governor.state(1)).to.be.eq(proposalState.Active);
+
+      await expect(governor.connect(bob).cancel(1)).to.be.revertedWith(
+        "GovernorAlpha::cancel: proposer above threshold"
+      );
+
+      // Bob - original proposer - looses the required amount of COMP tokens
+      await sushi.connect(bob).delegate(alice.address);
+
+      await expect(governor.connect(alice).cancel(1))
+        .to.emit(governor, "ProposalCanceled")
+        .withArgs(1);
+
+      expect(await governor.state(1)).to.be.eq(proposalState.Canceled);
+    });
+
+    it("Defeat propose", async () => {
+      expect(await governor.state(1)).to.be.eq(proposalState.Active);
+
+      // Users against vote
+      await governor.connect(alice).castVote(1, false);
+      await governor.connect(bob).castVote(1, false);
+
+      // end vote +17281 block
+      await network.provider.send("hardhat_mine", ["0x4381"]);
+
+      // check propose's status
+      expect(await governor.state(1)).to.be.eq(proposalState.Defeated);
+
+      await expect(governor.connect(bob).queue(1)).to.be.revertedWith(
+        "GovernorAlpha::queue: proposal can only be queued if it is succeeded"
+      );
+    });
+
+    it("Expired propose", async () => {
+      expect(await governor.state(1)).to.be.eq(proposalState.Active);
+
+      // Users against vote
+      await governor.connect(alice).castVote(1, true);
+      await governor.connect(bob).castVote(1, true);
+
+      // end vote +17281 block
+      await network.provider.send("hardhat_mine", ["0x4381"]);
+
+      await governor.connect(bob).queue(1);
+
+      // delay == 2 days
+      // GRACE_PERIOD == 14 days
+      // + 16 days
+      await network.provider.send("evm_increaseTime", [1382400]);
+      await network.provider.send("evm_mine");
+
+      await expect(governor.connect(bob).execute(1)).to.be.revertedWith(
+        "GovernorAlpha::execute: proposal can only be executed if it is queued"
+      );
+
+      expect(await governor.state(1)).to.be.eq(proposalState.Expired);
+    });
+
+    it("Change timelock delay", async () => {
+      // Not timelock can't execute
+      await expect(
+        timelock.setDelay(BigNumber.from(259200))
+      ).to.be.revertedWith("Timelock::setDelay: Call must come from Timelock.");
+
+      expect(await governor.state(1)).to.be.eq(proposalState.Active);
+
+      // Users against vote
+      await governor.connect(alice).castVote(1, true);
+      await governor.connect(bob).castVote(1, true);
+
+      // end vote +17281 block
+      await network.provider.send("hardhat_mine", ["0x4381"]);
+
+      await governor.connect(bob).queue(1);
+
+      // delay == 2 days
+      await network.provider.send("evm_increaseTime", [172801]);
+      await network.provider.send("evm_mine");
+
+      await governor.connect(bob).execute(1);
+
+      expect(await governor.state(1)).to.be.eq(proposalState.Executed);
+
+      expect(await timelock.delay()).to.be.eq(BigNumber.from(259200));
     });
   });
 });
