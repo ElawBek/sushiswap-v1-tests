@@ -71,7 +71,7 @@ describe("Governance", () => {
     tokenOne = await new MockERC20__factory(owner).deploy("tokenOne", "TKN1");
     tokenTwo = await new MockERC20__factory(owner).deploy("tokenTwo", "TKN2");
 
-    // mint some tokens fot liquidity
+    // mint some tokens for liquidity
     await tokenOne.mint(alice.address, parseEther("1000"));
     await tokenTwo.mint(alice.address, parseEther("1000"));
     await tokenOne.mint(bob.address, parseEther("1000"));

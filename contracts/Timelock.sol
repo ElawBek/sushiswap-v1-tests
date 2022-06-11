@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-// XXX: pragma solidity ^0.5.16;
 pragma solidity 0.6.12;
 
-// XXX: import "./SafeMath.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 contract Timelock {
@@ -80,7 +78,6 @@ contract Timelock {
     admin_initialized = false;
   }
 
-  // XXX: function() external payable { }
   receive() external payable {}
 
   function setDelay(uint256 delay_) public {

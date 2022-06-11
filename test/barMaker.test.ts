@@ -209,7 +209,6 @@ describe("app", () => {
 
       // stake sushis in bar contract
       // received xSushi (first deposit) === deposited sushi
-
       expect(await bar.totalSupply()).to.be.eq(constants.Zero);
       expect(await sushi.balanceOf(bar.address)).to.be.eq(constants.Zero);
 

@@ -2,6 +2,7 @@
 
 pragma solidity =0.6.12;
 
+// Common Wrapped Ether
 contract WETH {
   string public name = "Wrapped Ether";
   string public symbol = "WETH";
