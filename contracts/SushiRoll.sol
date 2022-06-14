@@ -115,22 +115,24 @@ contract SushiRoll {
     view
     returns (address pair)
   {
-    (address token0, address token1) = UniswapV2Library.sortTokens(
-      tokenA,
-      tokenB
-    );
-    pair = address(
-      uint256(
-        keccak256(
-          abi.encodePacked(
-            hex"ff",
-            oldRouter.factory(),
-            keccak256(abi.encodePacked(token0, token1)),
-            hex"24ced40395725c17f756437207ecf54f5c8fa1d83f1edcb41a39b520bb9e878c" // init code hash
-          )
-        )
-      )
-    );
+    pair = IUniswapV2Factory(oldRouter.factory()).getPair(tokenA, tokenB);
+
+    // (address token0, address token1) = UniswapV2Library.sortTokens(
+    //   tokenA,
+    //   tokenB
+    // );
+    // pair = address(
+    //   uint256(
+    //     keccak256(
+    //       abi.encodePacked(
+    //         hex"ff",
+    //         oldRouter.factory(),
+    //         keccak256(abi.encodePacked(token0, token1)),
+    //         hex"24ced40395725c17f756437207ecf54f5c8fa1d83f1edcb41a39b520bb9e878c" // init code hash
+    //       )
+    //     )
+    //   )
+    // );
   }
 
   // add liquidity in sushiswap pair

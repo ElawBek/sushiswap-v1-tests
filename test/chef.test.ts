@@ -6,28 +6,18 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { BigNumber, constants } from "ethers";
 import { parseEther } from "ethers/lib/utils";
 
+import { deploy } from "./utils/deploy";
+
 import {
   WETH,
-  WETH__factory,
   MockERC20,
-  MockERC20__factory,
   UniswapV2Factory,
-  UniswapV2Factory__factory,
   UniswapV2Router02,
-  UniswapV2Router02__factory,
+  SushiToken,
+  MasterChef,
   UniswapV2Pair,
   UniswapV2Pair__factory,
-  SushiToken,
-  SushiToken__factory,
-  MasterChef,
-  MasterChef__factory,
-  SushiBar,
-  SushiBar__factory,
-  SushiMaker,
-  SushiMaker__factory,
 } from "../typechain-types";
-
-const timestamp = ethers.BigNumber.from(1852640309);
 
 describe("app", () => {
   // Signers
@@ -51,65 +41,18 @@ describe("app", () => {
 
   let chef: MasterChef;
 
-  let bar: SushiBar;
-
-  let maker: SushiMaker;
-
   beforeEach(async () => {
-    [owner, alice, bob] = await ethers.getSigners();
-
-    // deploy local weth
-    weth = await new WETH__factory(owner).deploy();
-
-    tokenOne = await new MockERC20__factory(owner).deploy("One", "TKN1");
-    tokenTwo = await new MockERC20__factory(owner).deploy("Two", "TKN2");
-
-    // mint 10000 TKN1 and TKN2 for users
-    await tokenOne.mint(alice.address, parseEther("10000"));
-    await tokenTwo.mint(alice.address, parseEther("10000"));
-
-    await tokenOne.mint(bob.address, parseEther("10000"));
-    await tokenTwo.mint(bob.address, parseEther("10000"));
-
-    factory = await new UniswapV2Factory__factory(owner).deploy(owner.address);
-
-    router = await new UniswapV2Router02__factory(owner).deploy(
-      factory.address,
-      weth.address
-    );
-
-    // sushiswap
-    sushi = await new SushiToken__factory(owner).deploy();
-
-    // mint sushi to owner account for create SUSHI/WETH pair
-    await sushi.mint(owner.address, parseEther("1000"));
-
-    // mint initial supply of sushi to users for add liquidity to SUSHI/WETH pair
-    await sushi.mint(alice.address, parseEther("500"));
-    await sushi.mint(bob.address, parseEther("500"));
-
-    chef = await new MasterChef__factory(owner).deploy(
-      sushi.address,
-      owner.address, // devaddr
-      parseEther("10"), // Sushi per block
-      0, // start block
-      250 // end bonus block
-    );
-
-    // owner of sushiToken -> MasterChef
-    await sushi.transferOwnership(chef.address);
-
-    bar = await new SushiBar__factory(owner).deploy(sushi.address);
-
-    maker = await new SushiMaker__factory(owner).deploy(
-      factory.address,
-      bar.address,
-      sushi.address,
-      weth.address
-    );
-
-    // Fee receiver on factory -> SushiMaker
-    await factory.setFeeTo(maker.address);
+    const deployed = await deploy();
+    owner = deployed.owner;
+    alice = deployed.alice;
+    bob = deployed.bob;
+    weth = deployed.weth;
+    tokenOne = deployed.tokenOne;
+    tokenTwo = deployed.tokenTwo;
+    factory = deployed.factory;
+    router = deployed.router;
+    sushi = deployed.sushi;
+    chef = deployed.chef;
   });
 
   describe("Chef", () => {
@@ -118,6 +61,9 @@ describe("app", () => {
     let sushiToWethPair: UniswapV2Pair;
 
     beforeEach(async () => {
+      const timestamp =
+        (await ethers.provider.getBlock("latest")).timestamp + 1200;
+
       // allow router to use owner's sushis for create pair
       await sushi.approve(router.address, parseEther("1000"));
 

@@ -8,25 +8,23 @@ import { parseEther } from "ethers/lib/utils";
 
 import { signERC2612Permit } from "eth-permit";
 
+import { deploy } from "./utils/deploy";
+
 import {
   WETH,
-  WETH__factory,
+  MockERC20,
   UniswapV2Factory,
-  UniswapV2Factory__factory,
+  UniswapV2Router02,
+  SushiToken,
+  MasterChef,
   UniswapV2Pair,
   UniswapV2Pair__factory,
-  UniswapV2Router02,
-  UniswapV2Router02__factory,
-  MockERC20,
-  MockERC20__factory,
-  SushiToken,
-  SushiToken__factory,
-  MasterChef,
-  MasterChef__factory,
   Migrator,
   Migrator__factory,
   SushiRoll,
   SushiRoll__factory,
+  UniswapV2Factory__factory,
+  UniswapV2Router02__factory,
 } from "../typechain-types";
 
 describe("Migratory", () => {
@@ -58,21 +56,17 @@ describe("Migratory", () => {
   let roll: SushiRoll;
 
   beforeEach(async () => {
-    [owner, alice, bob] = await ethers.getSigners();
-
-    // deploy local WETH
-    weth = await new WETH__factory(owner).deploy();
-
-    // deploy two tokens for pair create
-    tokenOne = await new MockERC20__factory(owner).deploy("TokenOne", "TKN1");
-    tokenTwo = await new MockERC20__factory(owner).deploy("TokenTwo", "TKN2");
-
-    // mint 1000 TKN1 and TKN2 for users
-    await tokenOne.mint(alice.address, parseEther("1000"));
-    await tokenTwo.mint(alice.address, parseEther("1000"));
-
-    await tokenOne.mint(bob.address, parseEther("1000"));
-    await tokenTwo.mint(bob.address, parseEther("1000"));
+    const deployed = await deploy();
+    owner = deployed.owner;
+    alice = deployed.alice;
+    bob = deployed.bob;
+    weth = deployed.weth;
+    tokenOne = deployed.tokenOne;
+    tokenTwo = deployed.tokenTwo;
+    oldSushiFactory = deployed.factory;
+    oldSushiRouter = deployed.router;
+    sushi = deployed.sushi;
+    chef = deployed.chef;
 
     // deploy uniswap's contracts
     uniFactory = await new UniswapV2Factory__factory(owner).deploy(
@@ -84,14 +78,6 @@ describe("Migratory", () => {
     );
 
     // deploy sushiswap's contracts
-    oldSushiFactory = await new UniswapV2Factory__factory(owner).deploy(
-      owner.address
-    );
-    oldSushiRouter = await new UniswapV2Router02__factory(owner).deploy(
-      oldSushiFactory.address,
-      weth.address
-    );
-
     sushiFactory = await new UniswapV2Factory__factory(owner).deploy(
       owner.address
     );
@@ -100,28 +86,12 @@ describe("Migratory", () => {
       weth.address
     );
 
-    sushi = await new SushiToken__factory(owner).deploy();
-
-    // mint sushi to owner account for create SUSHI/WETH pair
-    await sushi.mint(owner.address, parseEther("1000"));
-
-    chef = await new MasterChef__factory(owner).deploy(
-      sushi.address,
-      owner.address, // devaddr
-      parseEther("10"), // sushiPerBlock
-      10, // startBlock
-      200 //  bonesEndBlock
-    );
-
-    // owner of sushiToken -> MasterChef
-    await sushi.transferOwnership(chef.address);
-
     // deploy migrator contracts
     migrator = await new Migrator__factory(owner).deploy(
-      chef.address,
-      oldSushiFactory.address,
-      sushiFactory.address,
-      150
+      chef.address, // chef
+      oldSushiFactory.address, // oldFactory
+      sushiFactory.address, // factory
+      150 // notBeforeBlock
     );
 
     // set migrator address to chef contract
@@ -186,9 +156,6 @@ describe("Migratory", () => {
       await oldTkn1ToTkn2Pair.connect(alice).approve(chef.address, aliceLp);
 
       await chef.connect(alice).deposit(0, aliceLp);
-
-      // 27 block
-      await expect(chef.migrate(0)).to.be.revertedWith("too early to migrate");
 
       // mine to 150+ block
       await network.provider.send("hardhat_mine", ["0x7d"]);

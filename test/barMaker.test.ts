@@ -6,28 +6,22 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { constants } from "ethers";
 import { parseEther } from "ethers/lib/utils";
 
+import { deploy } from "./utils/deploy";
+
 import {
-  WETH,
-  WETH__factory,
-  MockERC20,
-  MockERC20__factory,
-  UniswapV2Factory,
-  UniswapV2Factory__factory,
-  UniswapV2Router02,
-  UniswapV2Router02__factory,
-  UniswapV2Pair,
-  UniswapV2Pair__factory,
-  SushiToken,
-  SushiToken__factory,
-  MasterChef,
-  MasterChef__factory,
   SushiBar,
   SushiBar__factory,
   SushiMaker,
   SushiMaker__factory,
+  WETH,
+  MockERC20,
+  UniswapV2Factory,
+  UniswapV2Router02,
+  SushiToken,
+  MasterChef,
+  UniswapV2Pair,
+  UniswapV2Pair__factory,
 } from "../typechain-types";
-
-const timestamp = ethers.BigNumber.from(1852640309);
 
 describe("app", () => {
   // Signers
@@ -46,63 +40,23 @@ describe("app", () => {
 
   // sushi router
   let router: UniswapV2Router02;
-
   let sushi: SushiToken;
-
   let chef: MasterChef;
-
   let bar: SushiBar;
-
   let maker: SushiMaker;
 
   beforeEach(async () => {
-    [owner, alice, bob] = await ethers.getSigners();
-
-    // deploy local weth
-    weth = await new WETH__factory(owner).deploy();
-
-    tokenOne = await new MockERC20__factory(owner).deploy("One", "TKN1");
-    tokenTwo = await new MockERC20__factory(owner).deploy("Two", "TKN2");
-
-    // mint 10000 TKN1 and TKN2 to owner for create WETH/TKN1 and WETH/TKN2 pairs
-    await tokenOne.mint(owner.address, parseEther("10000"));
-    await tokenTwo.mint(owner.address, parseEther("10000"));
-
-    // mint 10000 TKN1 and TKN2 for users
-    await tokenOne.mint(alice.address, parseEther("10000"));
-    await tokenTwo.mint(alice.address, parseEther("10000"));
-
-    await tokenOne.mint(bob.address, parseEther("10000"));
-    await tokenTwo.mint(bob.address, parseEther("10000"));
-
-    factory = await new UniswapV2Factory__factory(owner).deploy(owner.address);
-
-    router = await new UniswapV2Router02__factory(owner).deploy(
-      factory.address,
-      weth.address
-    );
-
-    // sushiswap
-    sushi = await new SushiToken__factory(owner).deploy();
-
-    // mint sushi to owner account for create SUSHI/WETH pair
-    await sushi.mint(owner.address, parseEther("1000"));
-
-    // mint initial supply of sushi to users
-    await sushi.mint(alice.address, parseEther("50"));
-    await sushi.mint(bob.address, parseEther("50"));
-
-    // just first test, args - random
-    chef = await new MasterChef__factory(owner).deploy(
-      sushi.address,
-      owner.address, // devaddr
-      parseEther("10"), // Sushi per block
-      0, // start block
-      2 // end bonus block
-    );
-
-    // owner of sushiToken -> MasterChef
-    await sushi.transferOwnership(chef.address);
+    const deployed = await deploy();
+    owner = deployed.owner;
+    alice = deployed.alice;
+    bob = deployed.bob;
+    weth = deployed.weth;
+    tokenOne = deployed.tokenOne;
+    tokenTwo = deployed.tokenTwo;
+    factory = deployed.factory;
+    router = deployed.router;
+    sushi = deployed.sushi;
+    chef = deployed.chef;
 
     bar = await new SushiBar__factory(owner).deploy(sushi.address);
 
@@ -123,6 +77,9 @@ describe("app", () => {
     let sushiToWethPair: UniswapV2Pair;
 
     beforeEach(async () => {
+      const timestamp =
+        (await ethers.provider.getBlock("latest")).timestamp + 1200;
+
       // allow router to use owner's tokens for create pairs
       await sushi.approve(router.address, parseEther("1000"));
       await tokenOne.approve(router.address, constants.MaxUint256);
@@ -136,7 +93,9 @@ describe("app", () => {
         constants.Zero,
         owner.address,
         timestamp,
-        { value: parseEther("250") }
+        {
+          value: parseEther("250"),
+        }
       );
 
       // create pair 100 TKN1 = 1 ETH
@@ -147,7 +106,9 @@ describe("app", () => {
         constants.Zero,
         owner.address,
         timestamp,
-        { value: parseEther("10") }
+        {
+          value: parseEther("10"),
+        }
       );
 
       // create pair 100 TKN2 = 1 ETH
@@ -158,7 +119,9 @@ describe("app", () => {
         constants.Zero,
         owner.address,
         timestamp,
-        { value: parseEther("10") }
+        {
+          value: parseEther("10"),
+        }
       );
 
       // do sushi-weth pair contract callable (It can be useful)
@@ -236,6 +199,9 @@ describe("app", () => {
     });
 
     it("Leave from bar after any actions with pair", async () => {
+      const timestamp =
+        (await ethers.provider.getBlock("latest")).timestamp + 1200;
+
       // allow the SushiBar contract to use the Alice's and Bob's sushiToken
       await sushi.connect(alice).approve(bar.address, parseEther("50"));
       await sushi.connect(bob).approve(bar.address, parseEther("30"));
