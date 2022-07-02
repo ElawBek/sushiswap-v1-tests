@@ -4,7 +4,7 @@ import { ethers, network } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 
 import { constants, BigNumber } from "ethers";
-import { parseEther, AbiCoder } from "ethers/lib/utils";
+import { parseEther, AbiCoder, formatEther } from "ethers/lib/utils";
 
 import { splitSignatureToRSV, getEIP712Domain } from "./utils/EIP-712";
 
@@ -194,7 +194,7 @@ describe("Governance", () => {
       tkn2ToWethPair = new UniswapV2Pair__factory(owner).attach(createdPair);
     });
 
-    it("Add pools to chef", async () => {
+    xit("Add pools to chef", async () => {
       // change owner MasterChef --> Timelock contract
       await chef.transferOwnership(timelock.address);
 
@@ -303,7 +303,7 @@ describe("Governance", () => {
       expect(await chef.poolLength()).to.be.eq(3);
     });
 
-    it("Change alloc point in an existing pool", async () => {
+    xit("Change alloc point in an existing pool", async () => {
       // add pool to chef
       await chef.add(parseEther("11"), tkn1ToTkn2Pair.address, false);
 
@@ -410,7 +410,7 @@ describe("Governance", () => {
       await network.provider.send("hardhat_mine", ["0x2"]);
     });
 
-    it("Cancel vote", async () => {
+    xit("Cancel vote", async () => {
       expect(await governor.state(1)).to.be.eq(proposalState.Active);
 
       await expect(governor.connect(bob).cancel(1)).to.be.revertedWith(
@@ -427,7 +427,7 @@ describe("Governance", () => {
       expect(await governor.state(1)).to.be.eq(proposalState.Canceled);
     });
 
-    it("Defeat propose", async () => {
+    xit("Defeat propose", async () => {
       expect(await governor.state(1)).to.be.eq(proposalState.Active);
 
       // Users against vote
@@ -441,11 +441,11 @@ describe("Governance", () => {
       expect(await governor.state(1)).to.be.eq(proposalState.Defeated);
 
       await expect(governor.connect(bob).queue(1)).to.be.revertedWith(
-        "GovernorAlpha::queue: proposal can only be queued if it is succeeded"
+        "GovernorAlpha::queue: proposal can only be queued if xit is succeeded"
       );
     });
 
-    it("Expired propose", async () => {
+    xit("Expired propose", async () => {
       expect(await governor.state(1)).to.be.eq(proposalState.Active);
 
       // Users against vote
@@ -464,13 +464,13 @@ describe("Governance", () => {
       await network.provider.send("evm_mine");
 
       await expect(governor.connect(bob).execute(1)).to.be.revertedWith(
-        "GovernorAlpha::execute: proposal can only be executed if it is queued"
+        "GovernorAlpha::execute: proposal can only be executed if xit is queued"
       );
 
       expect(await governor.state(1)).to.be.eq(proposalState.Expired);
     });
 
-    it("Change timelock delay", async () => {
+    xit("Change timelock delay", async () => {
       // Not timelock can't execute
       await expect(
         timelock.setDelay(BigNumber.from(259200))
@@ -498,7 +498,7 @@ describe("Governance", () => {
       expect(await timelock.delay()).to.be.eq(BigNumber.from(259200));
     });
 
-    it("delegate by sig", async () => {
+    xit("delegate by sig", async () => {
       const expiry =
         (await ethers.provider.getBlock("latest")).timestamp + 10000;
 
@@ -540,7 +540,7 @@ describe("Governance", () => {
       );
     });
 
-    it("cast vote by sig", async () => {
+    xit("cast vote by sig", async () => {
       const domain = await getEIP712Domain(governor, alice);
 
       const types = {

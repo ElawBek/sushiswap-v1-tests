@@ -48,6 +48,10 @@ contract MasterChef is Ownable {
     //   2. User receives the pending reward sent to his/her address.
     //   3. User's `amount` gets updated.
     //   4. User's `rewardDebt` gets updated.
+
+    // reward = currentAmount * accSushiPerShare - currentAmount - pasAccSushiPerShare
+    // reward = curerntAmount (accSushiPerShare - pasAccSushiPerShare)
+    // reward = current amount * accSushiPerShare - rewardDebt
   }
 
   // Info of each pool.
